@@ -26,4 +26,12 @@
                 }
             }
         }
+        post {
+            always {
+                // Cette section s'exécute toujours, à la fin du pipeline
+                echo 'Updating GitLab commit status...'
+                updateGitlabCommitStatus name: 'jenkins-build', 
+                                    state: currentBuild.currentResult
+            }
+        }
     }
