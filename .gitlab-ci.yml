@@ -1,0 +1,75 @@
+# D'abord, on déclare une image Docker par défaut pour tous les jobs.
+# Ici, on utilise Maven 3.8 avec Java 11.
+default:
+  image: maven:3.8-openjdk-11
+
+# On déclare les étapes (stages) de notre pipeline dans l'ordre d'exécution.
+stages:
+  - build
+  - test
+  - package
+
+# On configure le cache pour Maven afin d’accélérer les builds suivants.
+cache:
+  # Clé de cache unique par branche pour éviter les conflits.
+  key: "$CI_COMMIT_REF_SLUG"
+  # Dossiers à mettre en cache. Pour Maven, c’est le dépôt local.
+  paths:
+    - .m2/repository
+
+# -------------------------------
+# JOB 1 : BUILD
+# -------------------------------
+build_job:
+  stage: build
+  script:
+    - echo "Début du build..."
+    # '--batch-mode' désactive l'interactif et rend Maven plus adapté à un CI/CD.
+    - mvn --batch-mode compile
+  artifacts:
+    # On conserve les fichiers du dossier target/ pour les jobs suivants.
+    paths:
+      - target/
+    expire_in: 1 week
+
+# -------------------------------
+# JOB 2 : TESTS
+# -------------------------------
+test_job:
+  stage: test
+  # Ce job dépend du build_job et récupère ses artefacts.
+  dependencies:
+    - build_job
+  script:
+    - echo "Lancement des tests..."
+    # Exécution des tests unitaires
+    - mvn --batch-mode test
+  artifacts:
+    # On conserve les rapports même si les tests échouent.
+    when: always
+    # GitLab CI peut afficher directement les résultats JUnit.
+    reports:
+      junit: target/surefire-reports/*.xml
+    # On sauvegarde aussi les logs des tests.
+    paths:
+      - target/surefire-reports/
+    expire_in: 1 week
+
+# -------------------------------
+# JOB 3 : PACKAGING
+# -------------------------------
+package_job:
+  stage: package
+  # Ce job dépend du build_job (pas besoin de récupérer les tests).
+  dependencies:
+    - build_job
+  script:
+    - echo "Packaging de l’application en .jar..."
+    # On génère le .jar sans relancer les tests (ils ont déjà été faits).
+    - mvn --batch-mode package -DskipTests
+  artifacts:
+    # On définit ici les fichiers à sauvegarder comme artefacts.
+    name: "petclinic-app-$CI_PIPELINE_IID" # Nom unique basé sur l’ID du pipeline
+    paths:
+      - target/*.jar # On conserve le(s) .jar généré(s)
+    expire_in: 1 week # L’artefact sera supprimé après 1 semaine 
